@@ -3,77 +3,577 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>网页视频下载器</title>
-    <style>
-        body { font-family: 'Segoe UI', sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
-        .container { background: #f8f9fa; padding: 25px; border-radius: 10px; box-shadow: 0 2px 15px rgba(0,0,0,0.1); }
-        .input-group { margin-bottom: 20px; }
-        input[type="text"] { width: 100%; padding: 12px; font-size: 16px; border: 1px solid #ddd; border-radius: 6px; }
-        button { background: #007bff; color: white; padding: 12px 25px; border: none; border-radius: 6px; cursor: pointer; margin-left: 10px; }
-        .video-list { list-style: none; padding: 0; }
-        .video-item { margin-bottom: 20px; padding: 15px; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .video-item a { display: inline-block; background: #28a745; color: white; padding: 8px 15px; border-radius: 4px; text-decoration: none; margin-left: 10px; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h2>网页视频下载器</h2>
-        <div class="input-group">
-            <input type="text" id="urlInput" placeholder="请输入视频网页URL">
-            <button onclick="parseVideo()">解析视频</button>
-        </div>
-        <ul class="video-list" id="videoList"></ul>
-    </div>
-
+    <title>视频合并工具</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
     <script>
-        async function parseVideo() {
-            const url = document.getElementById('urlInput').value.trim();
-            if (!url) return alert('请输入有效的URL');
-
-            try {
-                // 前端直接获取网页内容（可能受跨域限制）
-                const response = await fetch(url, {
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
-                    }
-                });
-                const html = await response.text();
-
-                // 提取视频标签中的源地址
-                const videoSources = [];
-                const videoRegex = /<video[^>]*src=["']?([^"']+)["']?/gi;
-                const sourceRegex = /<source[^>]*src=["']?([^"']+)["']?/gi;
-                const m3u8Regex = /(https?:\/\/.*?\.m3u8)/gi; // 适配HLS流媒体
-                const mp4Regex = /(https?:\/\/.*?\.(mp4|flv|avi|mov|wmv))/gi; // 适配常见格式
-
-                // 合并所有匹配结果
-                const allMatches = [...html.matchAll(videoRegex), ...html.matchAll(sourceRegex), ...html.matchAll(m3u8Regex), ...html.matchAll(mp4Regex)];
-                
-                // 去重并过滤无效地址
-                const uniqueSources = [...new Set(allMatches.map(match => match[1]))].filter(src => src.startsWith('http'));
-
-                // 渲染结果
-                const list = document.getElementById('videoList');
-                list.innerHTML = '';
-                uniqueSources.forEach((src, index) => {
-                    const li = document.createElement('li');
-                    li.className = 'video-item';
-                    li.innerHTML = `
-                        <span>视频 ${index + 1}</span>
-                        <a href="${src}" download="video_${index + 1}.mp4" target="_blank">下载视频</a>
-                    `;
-                    list.appendChild(li);
-                });
-
-                if (!uniqueSources.length) {
-                    alert('未找到可下载的视频资源');
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#165DFF',
+                        secondary: '#00B42A',
+                        danger: '#F53F3F',
+                        dark: '#1D2129',
+                        light: '#F2F3F5'
+                    },
+                    fontFamily: {
+                        inter: ['Inter', 'system-ui', 'sans-serif'],
+                    },
                 }
-
-            } catch (error) {
-                console.error('解析失败:', error);
-                alert('解析失败，请检查URL是否正确或尝试刷新页面');
             }
         }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .drop-shadow-lg {
+                filter: drop-shadow(0 10px 8px rgb(0 0 0 / 0.04)) drop-shadow(0 4px 3px rgb(0 0 0 / 0.1));
+            }
+            .transition-transform {
+                transition-property: transform;
+                transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+                transition-duration: 150ms;
+            }
+            .hover-scale {
+                @apply hover:scale-105 transition-transform;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-inter text-dark min-h-screen flex flex-col">
+    <header class="bg-white shadow-sm sticky top-0 z-10">
+        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+            <h1 class="text-2xl font-bold text-primary flex items-center">
+                <i class="fa fa-video-camera mr-2"></i>
+                视频合并工具
+            </h1>
+            <div class="flex space-x-4">
+                <a href="#" class="text-gray-600 hover:text-primary transition-colors">
+                    <i class="fa fa-question-circle mr-1"></i>帮助
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow container mx-auto px-4 py-8">
+        <div class="max-w-4xl mx-auto">
+            <!-- 功能说明卡片 -->
+            <div class="bg-white rounded-xl shadow-md p-6 mb-8">
+                <h2 class="text-xl font-semibold mb-3">如何使用</h2>
+                <ol class="list-decimal pl-5 space-y-2 text-gray-700">
+                    <li>上传两个视频文件（支持 MP4、WebM、MOV 等格式）</li>
+                    <li>点击"开始合并"按钮</li>
+                    <li>等待处理完成后下载合并后的视频</li>
+                </ol>
+                <div class="mt-4 text-sm text-gray-500">
+                    <i class="fa fa-info-circle mr-1"></i>
+                    注意：视频将上传到服务器进行处理，处理时间取决于视频大小和服务器负载。
+                </div>
+            </div>
+
+            <!-- 上传区域 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                <!-- 视频1上传 -->
+                <div id="video1Container" class="bg-white rounded-xl shadow-md p-6 hover-scale">
+                    <div class="text-center mb-4">
+                        <h3 class="text-lg font-medium mb-2">第一个视频</h3>
+                        <div class="relative h-64 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer bg-gray-50" id="dropZone1">
+                            <input type="file" id="video1Input" accept="video/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                            <div class="text-center p-4">
+                                <i class="fa fa-cloud-upload text-4xl text-gray-400 mb-2"></i>
+                                <p class="text-gray-500">拖放视频到这里或<span class="text-primary">点击上传</span></p>
+                            </div>
+                            <video id="video1Preview" class="hidden w-full h-full object-cover rounded-lg" controls></video>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center mt-4">
+                        <div id="video1Info" class="text-sm text-gray-600 hidden">
+                            <span id="video1Name">文件名</span>
+                            <span class="mx-1">•</span>
+                            <span id="video1Size">大小</span>
+                        </div>
+                        <button id="removeVideo1" class="text-danger hover:text-danger/80 text-sm hidden">
+                            <i class="fa fa-trash-o mr-1"></i>移除
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 视频2上传 -->
+                <div id="video2Container" class="bg-white rounded-xl shadow-md p-6 hover-scale">
+                    <div class="text-center mb-4">
+                        <h3 class="text-lg font-medium mb-2">第二个视频</h3>
+                        <div class="relative h-64 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center cursor-pointer bg-gray-50" id="dropZone2">
+                            <input type="file" id="video2Input" accept="video/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                            <div class="text-center p-4">
+                                <i class="fa fa-cloud-upload text-4xl text-gray-400 mb-2"></i>
+                                <p class="text-gray-500">拖放视频到这里或<span class="text-primary">点击上传</span></p>
+                            </div>
+                            <video id="video2Preview" class="hidden w-full h-full object-cover rounded-lg" controls></video>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center mt-4">
+                        <div id="video2Info" class="text-sm text-gray-600 hidden">
+                            <span id="video2Name">文件名</span>
+                            <span class="mx-1">•</span>
+                            <span id="video2Size">大小</span>
+                        </div>
+                        <button id="removeVideo2" class="text-danger hover:text-danger/80 text-sm hidden">
+                            <i class="fa fa-trash-o mr-1"></i>移除
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 控制区域 -->
+            <div class="bg-white rounded-xl shadow-md p-6 mb-8">
+                <div class="flex flex-wrap items-center justify-between gap-4">
+                    <div class="flex items-center space-x-4">
+                        <div class="text-gray-500 text-sm" id="mergeStatus">
+                            准备就绪
+                        </div>
+                    </div>
+                    <button id="mergeButton" class="px-6 py-3 bg-primary hover:bg-primary/90 text-white rounded-lg shadow-md hover-scale disabled:opacity-50 disabled:cursor-not-allowed flex items-center">
+                        <i class="fa fa-video-camera mr-2"></i>
+                        开始合并
+                    </button>
+                </div>
+            </div>
+
+            <!-- 进度条 -->
+            <div id="progressContainer" class="hidden bg-white rounded-xl shadow-md p-6 mb-8">
+                <h3 class="text-lg font-medium mb-4">处理进度</h3>
+                <div class="w-full bg-gray-200 rounded-full h-4 mb-2">
+                    <div id="progressBar" class="bg-secondary h-4 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+                <div class="flex justify-between text-sm text-gray-500">
+                    <span id="progressText">准备上传...</span>
+                    <span id="timeRemaining">--:--</span>
+                </div>
+                <div class="mt-4 text-sm text-gray-500" id="uploadSizeInfo">
+                    <span id="uploadedSize">0 MB</span> / <span id="totalSize">0 MB</span>
+                </div>
+            </div>
+
+            <!-- 结果区域 -->
+            <div id="resultContainer" class="hidden bg-white rounded-xl shadow-md p-6 mb-8">
+                <h3 class="text-lg font-medium mb-4">合并完成</h3>
+                <div class="relative h-64 border rounded-lg mb-4 overflow-hidden">
+                    <video id="resultPreview" class="w-full h-full object-cover" controls autoplay></video>
+                </div>
+                <div class="flex flex-wrap justify-between gap-4">
+                    <div class="flex items-center text-gray-600">
+                        <i class="fa fa-file-video-o mr-2 text-lg"></i>
+                        <span id="resultFileName">merged_video.mp4</span>
+                    </div>
+                    <div class="flex space-x-3">
+                        <button id="downloadButton" class="px-4 py-2 bg-secondary hover:bg-secondary/90 text-white rounded-lg shadow-md hover-scale flex items-center">
+                            <i class="fa fa-download mr-2"></i>
+                            下载视频
+                        </button>
+                        <button id="mergeAgainButton" class="px-4 py-2 bg-light hover:bg-gray-200 rounded-lg transition-colors flex items-center">
+                            <i class="fa fa-refresh mr-2"></i>
+                            重新合并
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 错误提示区域 -->
+            <div id="errorContainer" class="hidden bg-danger/10 border border-danger/30 text-danger p-4 rounded-lg mb-8">
+                <div class="flex items-center">
+                    <i class="fa fa-exclamation-circle mr-2"></i>
+                    <strong id="errorMessage">操作失败</strong>
+                </div>
+                <p id="errorDetails" class="mt-2 text-sm"></p>
+            </div>
+        </div>
+    </main>
+
+    <footer class="bg-dark text-white py-6">
+        <div class="container mx-auto px-4">
+            <div class="flex flex-col md:flex-row justify-between items-center">
+                <div class="mb-4 md:mb-0">
+                    <h2 class="text-xl font-bold">视频合并工具</h2>
+                    <p class="text-gray-400 mt-1">在服务器上轻松合并多个视频</p>
+                </div>
+                <div class="flex space-x-6">
+                    <a href="#" class="text-gray-400 hover:text-white transition-colors">
+                        <i class="fa fa-github text-xl"></i>
+                    </a>
+                    <a href="#" class="text-gray-400 hover:text-white transition-colors">
+                        <i class="fa fa-twitter text-xl"></i>
+                    </a>
+                    <a href="#" class="text-gray-400 hover:text-white transition-colors">
+                        <i class="fa fa-envelope text-xl"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="border-t border-gray-700 mt-6 pt-6 text-center text-gray-400 text-sm">
+                &copy; 2023 视频合并工具 | 所有权利保留
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 配置服务器地址（请修改为你的服务器地址）
+            const SERVER_URL = 'http://103.146.79.254:5001';
+            
+            // 获取DOM元素
+            const video1Input = document.getElementById('video1Input');
+            const video2Input = document.getElementById('video2Input');
+            const video1Preview = document.getElementById('video1Preview');
+            const video2Preview = document.getElementById('video2Preview');
+            const video1Info = document.getElementById('video1Info');
+            const video2Info = document.getElementById('video2Info');
+            const video1Name = document.getElementById('video1Name');
+            const video2Name = document.getElementById('video2Name');
+            const video1Size = document.getElementById('video1Size');
+            const video2Size = document.getElementById('video2Size');
+            const removeVideo1 = document.getElementById('removeVideo1');
+            const removeVideo2 = document.getElementById('removeVideo2');
+            const dropZone1 = document.getElementById('dropZone1');
+            const dropZone2 = document.getElementById('dropZone2');
+            const mergeButton = document.getElementById('mergeButton');
+            const mergeStatus = document.getElementById('mergeStatus');
+            const progressContainer = document.getElementById('progressContainer');
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            const timeRemaining = document.getElementById('timeRemaining');
+            const resultContainer = document.getElementById('resultContainer');
+            const resultPreview = document.getElementById('resultPreview');
+            const resultFileName = document.getElementById('resultFileName');
+            const downloadButton = document.getElementById('downloadButton');
+            const mergeAgainButton = document.getElementById('mergeAgainButton');
+            const errorContainer = document.getElementById('errorContainer');
+            const errorMessage = document.getElementById('errorMessage');
+            const errorDetails = document.getElementById('errorDetails');
+            const uploadedSize = document.getElementById('uploadedSize');
+            const totalSize = document.getElementById('totalSize');
+
+            // 存储视频文件和任务ID
+            let video1File = null;
+            let video2File = null;
+            let currentTaskId = null;
+
+            // 更新合并按钮状态
+            function updateMergeButton() {
+                mergeButton.disabled = !(video1File && video2File);
+                mergeStatus.textContent = video1File && video2File? '准备上传' : '请上传两个视频';
+            }
+
+            // 格式化文件大小
+            function formatFileSize(bytes) {
+                if (bytes === 0) return '0 Bytes';
+                const k = 1024;
+                const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) +'' + sizes[i];
+            }
+
+            // 显示视频预览
+            function showVideoPreview(videoInput, videoPreview, videoInfo, fileName, fileSize, file) {
+                const objectURL = URL.createObjectURL(file);
+                videoPreview.src = objectURL;
+                videoPreview.classList.remove('hidden');
+                videoInfo.classList.remove('hidden');
+                fileName.textContent = file.name;
+                fileSize.textContent = formatFileSize(file.size);
+            }
+
+            // 处理视频上传
+            video1Input.addEventListener('change', function(e) {
+                if (this.files.length > 0) {
+                    video1File = this.files[0];
+                    showVideoPreview(video1Input, video1Preview, video1Info, video1Name, video1Size, video1File);
+                    removeVideo1.classList.remove('hidden');
+                    updateMergeButton();
+                }
+            });
+
+            video2Input.addEventListener('change', function(e) {
+                if (this.files.length > 0) {
+                    video2File = this.files[0];
+                    showVideoPreview(video2Input, video2Preview, video2Info, video2Name, video2Size, video2File);
+                    removeVideo2.classList.remove('hidden');
+                    updateMergeButton();
+                }
+            });
+
+            // 拖放功能
+            [dropZone1, dropZone2].forEach((dropZone, index) => {
+                ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                    dropZone.addEventListener(eventName, preventDefaults, false);
+                });
+
+                function preventDefaults(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+
+                ['dragenter', 'dragover'].forEach(eventName => {
+                    dropZone.addEventListener(eventName, highlight, false);
+                });
+
+                ['dragleave', 'drop'].forEach(eventName => {
+                    dropZone.addEventListener(eventName, unhighlight, false);
+                });
+
+                function highlight() {
+                    dropZone.classList.add('border-primary');
+                }
+
+                function unhighlight() {
+                    dropZone.classList.remove('border-primary');
+                }
+
+                dropZone.addEventListener('drop', function(e) {
+                    const dt = e.dataTransfer;
+                    const file = dt.files[0];
+                    
+                    if (file && file.type.startsWith('video/')) {
+                        if (index === 0) {
+                            video1File = file;
+                            video1Input.files = dt.files;
+                            showVideoPreview(video1Input, video1Preview, video1Info, video1Name, video1Size, video1File);
+                            removeVideo1.classList.remove('hidden');
+                        } else {
+                            video2File = file;
+                            video2Input.files = dt.files;
+                            showVideoPreview(video2Input, video2Preview, video2Info, video2Name, video2Size, video2File);
+                            removeVideo2.classList.remove('hidden');
+                        }
+                        updateMergeButton();
+                    }
+                }, false);
+            });
+
+            // 移除视频
+            removeVideo1.addEventListener('click', function() {
+                video1File = null;
+                video1Input.value = '';
+                video1Preview.classList.add('hidden');
+                video1Info.classList.add('hidden');
+                removeVideo1.classList.add('hidden');
+                updateMergeButton();
+            });
+
+            removeVideo2.addEventListener('click', function() {
+                video2File = null;
+                video2Input.value = '';
+                video2Preview.classList.add('hidden');
+                video2Info.classList.add('hidden');
+                removeVideo2.classList.add('hidden');
+                updateMergeButton();
+            });
+
+            // 合并视频按钮点击事件
+            mergeButton.addEventListener('click', async function() {
+                if (!video1File || !video2File) return;
+
+                // 重置状态
+                hideElement(errorContainer);
+                resultContainer.classList.add('hidden');
+                
+                // 显示进度条
+                progressContainer.classList.remove('hidden');
+                progressBar.style.width = '0%';
+                progressText.textContent = '准备上传...';
+                timeRemaining.textContent = '--:--';
+                
+                // 计算总大小
+                const totalBytes = video1File.size + video2File.size;
+                totalSize.textContent = formatFileSize(totalBytes);
+                uploadedSize.textContent = '0 MB';
+
+                try {
+                    // 上传视频到服务器
+                    await uploadVideos();
+                } catch (error) {
+                    console.error('上传失败:', error);
+                    showError('上传失败', error.message);
+                }
+            });
+
+            // 重新合并按钮
+            mergeAgainButton.addEventListener('click', function() {
+                resultContainer.classList.add('hidden');
+                progressContainer.classList.add('hidden');
+                currentTaskId = null;
+            });
+
+            // 下载按钮
+            downloadButton.addEventListener('click', function() {
+                if (currentTaskId) {
+                    window.location.href = `${SERVER_URL}/download/${currentTaskId}`;
+                }
+            });
+
+            // 上传视频到服务器
+            async function uploadVideos() {
+                const formData = new FormData();
+                formData.append('video1', video1File);
+                formData.append('video2', video2File);
+
+                // 上传进度处理
+                let startTime = Date.now();
+                let lastUpdateTime = startTime;
+                let lastUploadedBytes = 0;
+                
+                try {
+                    const response = await fetch(`${SERVER_URL}/upload`, {
+                        method: 'POST',
+                        body: formData,
+                        // 监听上传进度
+                        onUploadProgress: function(progressEvent) {
+                            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                            const uploadedBytes = progressEvent.loaded;
+                            
+                            // 更新进度条和文本
+                            progressBar.style.width = `${percentCompleted}%`;
+                            progressText.textContent = `上传中...${percentCompleted}%`;
+                            uploadedSize.textContent = formatFileSize(uploadedBytes);
+                            
+                            // 估算剩余时间
+                            const now = Date.now();
+                            const elapsed = now - startTime;
+                            
+                            if (elapsed > 1000 && uploadedBytes > lastUploadedBytes) {
+                                const uploadRate = (uploadedBytes - lastUploadedBytes) / (now - lastUpdateTime) * 1000; // B/s
+                                const remainingBytes = progressEvent.total - uploadedBytes;
+                                const remainingSeconds = Math.floor(remainingBytes / uploadRate);
+                                
+                                const minutes = Math.floor(remainingSeconds / 60);
+                                const seconds = remainingSeconds % 60;
+                                
+                                timeRemaining.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                                
+                                lastUpdateTime = now;
+                                lastUploadedBytes = uploadedBytes;
+                            }
+                        }
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`服务器响应错误: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    
+                    if (data.status !== 'success') {
+                        throw new Error(data.message || '上传失败');
+                    }
+                    
+                    // 保存任务ID并开始轮询状态
+                    currentTaskId = data.task_id;
+                    progressText.textContent = '上传完成，服务器正在处理...';
+                    progressBar.style.width = '100%';
+                    timeRemaining.textContent = '处理中...';
+                    
+                    // 开始轮询任务状态
+                    pollTaskStatus(currentTaskId);
+                } catch (error) {
+                    throw new Error(`上传过程出错: ${error.message}`);
+                }
+            }
+
+            // 轮询任务状态
+            async function pollTaskStatus(task_id) {
+                let pollInterval = 1000; // 初始轮询间隔1秒
+                let maxInterval = 5000;  // 最大轮询间隔5秒
+                let consecutiveSameProgress = 0; // 连续相同进度的次数
+                
+                let lastProgress = 0;
+                
+                while (true) {
+                    try {
+                        const response = await fetch(`${SERVER_URL}/task/${task_id}`);
+                        
+                        if (!response.ok) {
+                            throw new Error(`获取任务状态失败: ${response.status}`);
+                        }
+                        
+                        const data = await response.json();
+                        
+                        if (data.status === 'completed') {
+                            progressBar.style.width = '100%';
+                            progressText.textContent = '处理完成';
+                            timeRemaining.textContent = '00:00';
+                            
+                            // 延迟显示结果，让用户看到完成状态
+                            setTimeout(() => {
+                                progressContainer.classList.add('hidden');
+                                resultContainer.classList.remove('hidden');
+                                resultFileName.textContent = `merged_${task_id}.mp4`;
+                                
+                                // 尝试加载视频预览
+                                try {
+                                    resultPreview.src = `${SERVER_URL}/download/${task_id}`;
+                                } catch (e) {
+                                    console.log('无法加载视频预览，可能需要跨域配置');
+                                }
+                            }, 1000);
+                            
+                            break;
+                        } else if (data.status === 'error') {
+                            throw new Error(data.error || '服务器处理出错');
+                        } else if (data.status === 'processing') {
+                            // 更新进度
+                            const progress = data.progress || 0;
+                            progressBar.style.width = `${progress}%`;
+                            
+                            if (progress < 20) {
+                                progressText.textContent = '分析视频...';
+                            } else if (progress < 50) {
+                                progressText.textContent = '处理第一部分...';
+                            } else if (progress < 80) {
+                                progressText.textContent = '处理第二部分...';
+                            } else {
+                                progressText.textContent = '完成后期处理...';
+                            }
+                            
+                            // 如果进度没有变化，增加轮询间隔
+                            if (progress === lastProgress) {
+                                consecutiveSameProgress++;
+                                if (consecutiveSameProgress >= 3 && pollInterval < maxInterval) {
+                                    pollInterval = Math.min(pollInterval * 2, maxInterval);
+                                }
+                            } else {
+                                consecutiveSameProgress = 0;
+                                pollInterval = 1000; // 重置轮询间隔
+                                lastProgress = progress;
+                            }
+                        }
+                        
+                        // 继续轮询
+                        await new Promise(resolve => setTimeout(resolve, pollInterval));
+                    } catch (error) {
+                        console.error('轮询任务状态失败:', error);
+                        showError('处理失败', error.message);
+                        break;
+                    }
+                }
+            }
+
+            // 显示错误信息
+            function showError(message, details) {
+                errorMessage.textContent = message;
+                errorDetails.textContent = details || '';
+                errorContainer.classList.remove('hidden');
+                progressContainer.classList.add('hidden');
+            }
+
+            // 隐藏元素
+            function hideElement(element) {
+                element.classList.add('hidden');
+            }
+
+            // 初始化
+            updateMergeButton();
+        });
     </script>
 </body>
 </html>
