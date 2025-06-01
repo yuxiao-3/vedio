@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>网页视频下载器</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
+        .container { background: #f8f9fa; padding: 25px; border-radius: 10px; box-shadow: 0 2px 15px rgba(0,0,0,0.1); }
+        .input-group { margin-bottom: 20px; }
+        input[type="text"] { width: 100%; padding: 12px; font-size: 16px; border: 1px solid #ddd; border-radius: 6px; }
+        button { background: #007bff; color: white; padding: 12px 25px; border: none; border-radius: 6px; cursor: pointer; margin-left: 10px; }
+        .video-list { list-style: none; padding: 0; }
+        .video-item { margin-bottom: 20px; padding: 15px; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .video-item a { display: inline-block; background: #28a745; color: white; padding: 8px 15px; border-radius: 4px; text-decoration: none; margin-left: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>网页视频下载器</h2>
+        <div class="input-group">
+            <input type="text" id="urlInput" placeholder="请输入视频网页URL">
+            <button onclick="parseVideo()">解析视频</button>
+        </div>
+        <ul class="video-list" id="videoList"></ul>
+    </div>
+
+    <script>
+        async function parseVideo() {
+            const url = document.getElementById('urlInput').value.trim();
+            if (!url) return alert('请输入有效的URL');
+
+            try {
+                // 前端直接获取网页内容（可能受跨域限制）
+                const response = await fetch(url, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
+                    }
+                });
+                const html = await response.text();
+
+                // 提取视频标签中的源地址
+                const videoSources = [];
+                const videoRegex = /<video[^>]*src=["']?([^"']+)["']?/gi;
+                const sourceRegex = /<source[^>]*src=["']?([^"']+)["']?/gi;
+                const m3u8Regex = /(https?:\/\/.*?\.m3u8)/gi; // 适配HLS流媒体
+                const mp4Regex = /(https?:\/\/.*?\.(mp4|flv|avi|mov|wmv))/gi; // 适配常见格式
+
+                // 合并所有匹配结果
+                const allMatches = [...html.matchAll(videoRegex), ...html.matchAll(sourceRegex), ...html.matchAll(m3u8Regex), ...html.matchAll(mp4Regex)];
+                
+                // 去重并过滤无效地址
+                const uniqueSources = [...new Set(allMatches.map(match => match[1]))].filter(src => src.startsWith('http'));
+
+                // 渲染结果
+                const list = document.getElementById('videoList');
+                list.innerHTML = '';
+                uniqueSources.forEach((src, index) => {
+                    const li = document.createElement('li');
+                    li.className = 'video-item';
+                    li.innerHTML = `
+                        <span>视频 ${index + 1}</span>
+                        <a href="${src}" download="video_${index + 1}.mp4" target="_blank">下载视频</a>
+                    `;
+                    list.appendChild(li);
+                });
+
+                if (!uniqueSources.length) {
+                    alert('未找到可下载的视频资源');
+                }
+
+            } catch (error) {
+                console.error('解析失败:', error);
+                alert('解析失败，请检查URL是否正确或尝试刷新页面');
+            }
+        }
+    </script>
+</body>
+</html>
